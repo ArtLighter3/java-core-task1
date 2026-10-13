@@ -9,6 +9,9 @@ public class TestLogParser {
     enum Status { PASSED, FAILED, SKIPPED }
 
     record TestResult(String name, Status status, long durationMs) {
+
+        //переопределены, потому что иначе тесты с одним именем, но разными статусами или длительностью будут
+        //считаться разными.
         @Override
         public boolean equals(Object object) {
             if (object == null || getClass() != object.getClass()) return false;
@@ -22,8 +25,8 @@ public class TestLogParser {
         }
     }
 
-    class TestResultInvalidSyntaxException extends Exception {
-        private String testResultLine;
+    static class TestResultInvalidSyntaxException extends Exception {
+        private final String testResultLine;
 
         public TestResultInvalidSyntaxException(String testResultLine, String message) {
             super(message);
@@ -35,21 +38,19 @@ public class TestLogParser {
         }
     }
 
-    private List<TestResultInvalidSyntaxException> errors = new ArrayList<>();
+    private static List<TestResultInvalidSyntaxException> errors = new ArrayList<>();
 
-    public List<TestResult> parse(List<String> lines) {
+    public static List<TestResult> parse(List<String> lines) {
         errors.clear();
+        //equals и hashCode не используются напрямую, т.к. это происходит при сравнивании внутри хэш-коллекции
         Set<TestResult> results = new LinkedHashSet<>();
 
         for (String line : lines) {
             try {
                 TestResult result = parseLine(line);
 
-                boolean isNotPresent = results.add(result);
-                if (!isNotPresent) {
-                    results.remove(result);
-                    results.add(result);
-                }
+                results.remove(result);
+                results.add(result);
             } catch (TestResultInvalidSyntaxException ex) {
                 errors.add(ex);
             }
@@ -58,11 +59,7 @@ public class TestLogParser {
         return results.stream().toList();
     }
 
-    public List<TestResultInvalidSyntaxException> getErrors() {
-        return errors;
-    }
-
-    private TestResult parseLine(String line) throws TestResultInvalidSyntaxException {
+    private static TestResult parseLine(String line) throws TestResultInvalidSyntaxException {
         String[] parts = line.split("\\|");
         if (parts.length < 3) {
             throw new TestResultInvalidSyntaxException(line, "нет разделителя");
@@ -102,8 +99,7 @@ public class TestLogParser {
             System.out.printf("Ошибка чтения файла '%s'%n", logFilePath);
         }
 
-        TestLogParser parser = new TestLogParser();
-        List<TestResult> results = parser.parse(lines);
+        List<TestResult> results = parse(lines);
 
         System.out.println("Результаты: ");
         for (TestResult result : results) {
@@ -111,7 +107,6 @@ public class TestLogParser {
         }
 
         System.out.print("Битые строки: ");
-        List<TestResultInvalidSyntaxException> errors = parser.getErrors();
         if (!errors.isEmpty()) {
             System.out.println();
             for (TestResultInvalidSyntaxException ex : errors) {
